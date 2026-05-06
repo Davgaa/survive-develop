@@ -11,12 +11,14 @@ public class SceneBootstrapper : MonoBehaviour
 
     void Start()
     {
-#if UNITY_SERVER
-        Debug.Log("[Bootstrap] SERVER MODE");
-#else
+        if (Application.isBatchMode)
+        {
+            Debug.Log("[Bootstrap] SERVER MODE");
+            return;
+        }
+
         Debug.Log("[Bootstrap] CLIENT MODE");
         Debug.Log("[Bootstrap] Loading Mainmenu...");
         SceneManager.LoadScene("Mainmenu");
-#endif
     }
 }

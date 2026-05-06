@@ -14,6 +14,7 @@ public class ChunkManager : MonoBehaviour
     public int resolution = 30;
     public float heightVariation = 5f;
     public float noiseScale = 0.05f;
+    public int worldSeed = 20260506;
     public int viewDistance = 2;
     public Material groundMaterial;
 
@@ -34,9 +35,11 @@ public class ChunkManager : MonoBehaviour
     void Awake()
     {
         IsLoaded = false;
+        IsMapReady = false;
         OnMapReady = null;
         _mapReadyFired = false;
-        _seed = Random.Range(0f, 1000f);
+        _seed = worldSeed;
+        Debug.Log($"[ChunkManager] World seed = {worldSeed}");
     }
 
     void Start()
@@ -259,7 +262,8 @@ public class ChunkManager : MonoBehaviour
         if (treePrefabs == null || treePrefabs.Length == 0) return;
 
         var old = Random.state;
-        Random.InitState(coord.x * 73856093 ^ coord.y * 19349663);
+        int treeSeed = unchecked(worldSeed ^ (coord.x * 73856093) ^ (coord.y * 19349663));
+        Random.InitState(treeSeed);
 
         int count = Mathf.Clamp(
             Mathf.RoundToInt(chunkSize * treeChance * 0.05f), 1, 8);

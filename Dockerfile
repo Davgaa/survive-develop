@@ -8,6 +8,6 @@ WORKDIR /app
 COPY . .
 RUN chmod +x ./Survive.x86_64
 
-EXPOSE 7770
+EXPOSE 10000
 
 CMD ["./Survive.x86_64", "-batchmode", "-nographics"]

@@ -2,6 +2,7 @@ using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine.Events;
 
 public class WaveManager : NetworkBehaviour
@@ -17,9 +18,17 @@ public class WaveManager : NetworkBehaviour
     [Header("Wave тохиргоо")]
     [SerializeField] private float _timeBetweenWaves = 15f;
     [SerializeField] private float _spawnInterval = 0.5f;
+    [SerializeField] private bool _useStressSpawnCount = true;
+    [SerializeField] private int _stressEnemyCount = 50;
+    [SerializeField] private float _stressTestSpawnInterval = 0.1f;
+    [SerializeField] private float _spawnMinDistance = 3f;
+    [SerializeField] private float _spawnRingMinDistance = 22f;
+    [SerializeField] private float _spawnRingMaxDistance = 45f;
+    [SerializeField] private int _spawnPositionAttempts = 24;
 
     private readonly SyncVar<int> _currentWave = new SyncVar<int>();
     private readonly SyncVar<int> _enemiesAlive = new SyncVar<int>();
+    private readonly List<Vector3> _waveSpawnPositions = new List<Vector3>();
 
     public int CurrentWave => _currentWave.Value;
     public int EnemiesAlive => _enemiesAlive.Value;
@@ -64,6 +73,7 @@ public class WaveManager : NetworkBehaviour
         while (_canStartWaves)
         {
             _currentWave.Value++;
+            _waveSpawnPositions.Clear();
             Debug.Log($"[WaveManager] Starting wave {_currentWave.Value}");
 
             yield return StartCoroutine(SpawnWave(_currentWave.Value));
@@ -78,31 +88,78 @@ public class WaveManager : NetworkBehaviour
 
     private IEnumerator SpawnWave(int wave)
     {
+        bool stressTestWave = _useStressSpawnCount && wave == 1;
+        if (stressTestWave)
+        {
+            Debug.Log($"[WaveManager] Stress wave {wave}: total enemies={_stressEnemyCount}, interval={_stressTestSpawnInterval:0.###}s");
+
+            for (int i = 0; i < _stressEnemyCount; i++)
+            {
+                SpawnEnemy(GetStressTestPrefab(i), i % 3);
+                yield return new WaitForSeconds(_stressTestSpawnInterval);
+            }
+
+            yield break;
+        }
+
         int banditCount = 3 + wave * 2;
         int knightCount = wave >= 3 ? wave : 0;
         int skeletonCount = wave >= 5 ? wave - 3 : 0;
+        float spawnInterval = _spawnInterval;
+        Debug.Log($"[WaveManager] Wave {wave} counts: bandit={banditCount}, knight={knightCount}, skeleton={skeletonCount}, interval={spawnInterval:0.###}s");
 
         for (int i = 0; i < banditCount; i++)
         {
-            SpawnEnemy(_banditPrefab);
-            yield return new WaitForSeconds(_spawnInterval);
+            SpawnEnemy(_banditPrefab, 0);
+            yield return new WaitForSeconds(spawnInterval);
         }
 
         for (int i = 0; i < knightCount; i++)
         {
-            SpawnEnemy(_knightPrefab);
-            yield return new WaitForSeconds(_spawnInterval * 1.5f);
+            SpawnEnemy(_knightPrefab, 1);
+            yield return new WaitForSeconds(spawnInterval);
         }
 
         for (int i = 0; i < skeletonCount; i++)
         {
-            SpawnEnemy(_skeletonPrefab);
-            yield return new WaitForSeconds(_spawnInterval * 2f);
+            SpawnEnemy(_skeletonPrefab, 2);
+            yield return new WaitForSeconds(spawnInterval);
         }
     }
 
+    private NetworkObject GetStressTestPrefab(int index)
+    {
+        NetworkObject[] prefabs = { _banditPrefab, _knightPrefab, _skeletonPrefab };
+        int available = 0;
+
+        for (int i = 0; i < prefabs.Length; i++)
+        {
+            if (prefabs[i] != null)
+                available++;
+        }
+
+        if (available == 0)
+            return null;
+
+        int wanted = index % available;
+        int seen = 0;
+
+        for (int i = 0; i < prefabs.Length; i++)
+        {
+            if (prefabs[i] == null)
+                continue;
+
+            if (seen == wanted)
+                return prefabs[i];
+
+            seen++;
+        }
+
+        return _banditPrefab;
+    }
+
     [Server]
-    private void SpawnEnemy(NetworkObject prefab)
+    private void SpawnEnemy(NetworkObject prefab, int spawnSector)
     {
         if (prefab == null)
         {
@@ -110,7 +167,7 @@ public class WaveManager : NetworkBehaviour
             return;
         }
 
-        Vector3 spawnPos = GetSpawnPosition();
+        Vector3 spawnPos = GetSpawnPosition(spawnSector);
         if (spawnPos == Vector3.zero)
         {
             Debug.LogWarning("[WaveManager] Could not find valid spawn position.");
@@ -119,17 +176,15 @@ public class WaveManager : NetworkBehaviour
 
         NetworkObject enemy = Instantiate(prefab, spawnPos, Quaternion.identity);
         ServerManager.Spawn(enemy);
+        _waveSpawnPositions.Add(spawnPos);
 
         _enemiesAlive.Value++;
-        Debug.Log($"[WaveManager] Spawned enemy. Alive = {_enemiesAlive.Value}");
-        Debug.Log($"[WaveManager] Spawning enemy at {spawnPos}");
         EnemyHealth health = enemy.GetComponent<EnemyHealth>();
         if (health != null)
         {
             health.OnDeath.AddListener(() =>
             {
                 _enemiesAlive.Value = Mathf.Max(0, _enemiesAlive.Value - 1);
-                Debug.Log($"[WaveManager] Enemy died. Alive = {_enemiesAlive.Value}");
             });
         }
         else
@@ -138,10 +193,27 @@ public class WaveManager : NetworkBehaviour
         }
     }
 
-    private Vector3 GetSpawnPosition()
+    private Vector3 GetSpawnPosition(int spawnSector)
     {
-        float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
-        float dist = Random.Range(20f, 30f);
+        for (int i = 0; i < _spawnPositionAttempts; i++)
+        {
+            Vector3 candidate = GetSpawnCandidate(spawnSector);
+            if (candidate == Vector3.zero)
+                continue;
+
+            if (IsFarEnoughFromOtherSpawns(candidate))
+                return candidate;
+        }
+
+        return GetSpawnCandidate(spawnSector);
+    }
+
+    private Vector3 GetSpawnCandidate(int spawnSector)
+    {
+        float sectorSize = 120f;
+        float angleStart = spawnSector * sectorSize;
+        float angle = Random.Range(angleStart, angleStart + sectorSize) * Mathf.Deg2Rad;
+        float dist = Random.Range(_spawnRingMinDistance, _spawnRingMaxDistance);
 
         float x = Mathf.Cos(angle) * dist;
         float z = Mathf.Sin(angle) * dist;
@@ -152,5 +224,18 @@ public class WaveManager : NetworkBehaviour
             return hit.point + Vector3.up * 1f;
 
         return Vector3.zero;
+    }
+
+    private bool IsFarEnoughFromOtherSpawns(Vector3 candidate)
+    {
+        float minSqrDistance = _spawnMinDistance * _spawnMinDistance;
+
+        for (int i = 0; i < _waveSpawnPositions.Count; i++)
+        {
+            if ((candidate - _waveSpawnPositions[i]).sqrMagnitude < minSqrDistance)
+                return false;
+        }
+
+        return true;
     }
 }

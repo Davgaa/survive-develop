@@ -640,8 +640,9 @@ MonoBehaviour:
   viewDistance: 2
   groundMaterial: {fileID: 2100000, guid: 22d266c9aadd931499502c4310260cbc, type: 2}
   treePrefabs:
-  - {fileID: 100000, guid: dec71bb4e66221144b5db0af9e0f39d5, type: 3}
-  - {fileID: 100000, guid: 9ddce011fb3cf3341b8c252c9b00cb4c, type: 3}
+  - {fileID: 149218, guid: fc05c8bfad7df5a4abe568aca7403b9e, type: 3}
+  - {fileID: 166966, guid: 78c29697749a6d44e964f9a0cf83d77a, type: 3}
+  - {fileID: 115020, guid: a0c53a09e4a37b5409b1248ebce2c376, type: 3}
   treeChance: 0.9
   arenaRadius: 15
   navMeshSurface: {fileID: 1194737591}
@@ -658,7 +659,7 @@ GameObject:
   - component: {fileID: 1385332951}
   - component: {fileID: 1385332950}
   m_Layer: 5
-  m_Name: Canvas
+  m_Name: Crosshair
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -924,6 +925,13 @@ MonoBehaviour:
     m_Bits: 128
   _timeBetweenWaves: 25
   _spawnInterval: 0.5
+  _useStressSpawnCount: 1
+  _stressEnemyCount: 50
+  _stressTestSpawnInterval: 0.1
+  _spawnMinDistance: 3
+  _spawnRingMinDistance: 22
+  _spawnRingMaxDistance: 45
+  _spawnPositionAttempts: 24
 --- !u!4 &1649098848
 Transform:
   m_ObjectHideFlags: 0

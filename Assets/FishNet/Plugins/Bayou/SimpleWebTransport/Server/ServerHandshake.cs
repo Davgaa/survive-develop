@@ -36,6 +36,7 @@ namespace JamesFrowen.SimpleWeb
         public bool TryHandshake(Connection conn)
         {
             Stream stream = conn.stream;
+            bool isHead;
 
             using (ArrayBuffer getHeader = bufferPool.Take(GetSize))
             {
@@ -44,9 +45,12 @@ namespace JamesFrowen.SimpleWeb
 
                 getHeader.count = GetSize;
 
-                if (!IsGet(getHeader.array))
+                bool isGet = IsGet(getHeader.array);
+                isHead = IsHead(getHeader.array);
+
+                if (!isGet && !isHead)
                 {
-                    Log.Warn($"First bytes from client was not 'GET' for handshake, instead was {Log.BufferToString(getHeader.array, 0, GetSize)}");
+                    Log.Warn($"First bytes from client was not 'GET' or 'HEAD' for handshake, instead was {Log.BufferToString(getHeader.array, 0, GetSize)}");
                     return false;
                 }
             }
@@ -55,6 +59,12 @@ namespace JamesFrowen.SimpleWeb
 
             if (string.IsNullOrEmpty(msg))
                 return false;
+
+            if (!IsWebSocketUpgrade(msg))
+            {
+                WriteHealthResponse(stream, isHead);
+                return false;
+            }
 
             try
             {
@@ -97,6 +107,33 @@ namespace JamesFrowen.SimpleWeb
             return getHeader[0] == 71 && // G
                    getHeader[1] == 69 && // E
                    getHeader[2] == 84;   // T
+        }
+
+        static bool IsHead(byte[] getHeader)
+        {
+            return getHeader[0] == 72 && // H
+                   getHeader[1] == 69 && // E
+                   getHeader[2] == 65;   // A
+        }
+
+        static bool IsWebSocketUpgrade(string msg)
+        {
+            return msg.IndexOf(KeyHeaderString, StringComparison.InvariantCultureIgnoreCase) >= 0 &&
+                   msg.IndexOf("\r\nUpgrade: websocket", StringComparison.InvariantCultureIgnoreCase) >= 0;
+        }
+
+        static void WriteHealthResponse(Stream stream, bool headerOnly)
+        {
+            string body = headerOnly ? string.Empty : "OK";
+            string response =
+                "HTTP/1.1 200 OK\r\n" +
+                "Connection: close\r\n" +
+                "Content-Type: text/plain\r\n" +
+                $"Content-Length: {body.Length}\r\n\r\n" +
+                body;
+
+            byte[] bytes = Encoding.ASCII.GetBytes(response);
+            stream.Write(bytes, 0, bytes.Length);
         }
 
         void AcceptHandshake(Stream stream, string msg)

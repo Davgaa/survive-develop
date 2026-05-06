@@ -11,9 +11,8 @@ public class ServerStarter : MonoBehaviour
 
     private void Awake()
     {
-#if UNITY_SERVER
-        StartServer();
-#endif
+        if (Application.isBatchMode)
+            StartServer();
     }
 
     private void StartServer()

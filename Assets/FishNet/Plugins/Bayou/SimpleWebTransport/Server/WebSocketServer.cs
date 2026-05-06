@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
+using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 
@@ -34,10 +35,10 @@ namespace JamesFrowen.SimpleWeb
 
         public void Listen(int port)
         {
-            listener = TcpListener.Create(port);
+            listener = new TcpListener(IPAddress.Any, port);
             listener.Start();
 
-            Log.Info($"Server has started on port {port}");
+            Log.Info($"Server has started on 0.0.0.0:{port}");
 
             acceptThread = new Thread(acceptLoop);
             acceptThread.IsBackground = true;
