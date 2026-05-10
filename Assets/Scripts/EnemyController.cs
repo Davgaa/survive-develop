@@ -9,6 +9,7 @@ public class EnemyController : NetworkBehaviour
     [SerializeField] private float animationSyncInterval = 0.15f;
     [SerializeField] private float destinationRefreshInterval = 0.25f;
     [SerializeField] private float destinationMoveThreshold = 0.75f;
+    [SerializeField] private float _attackCooldown = 1.5f;
 
     NavMeshAgent _agent;
     Transform _target;
@@ -17,6 +18,7 @@ public class EnemyController : NetworkBehaviour
     float _nextAnimationSyncTime;
     float _nextDestinationRefreshTime;
     float _lastSyncedSpeed = -1f;
+    float _lastAttackTime;
     Vector3 _lastDestination;
     bool _lastSyncedAttack;
 
@@ -30,15 +32,18 @@ public class EnemyController : NetworkBehaviour
     public override void OnStartServer()
     {
         base.OnStartServer();
+        FindTarget();
+    }
 
+    public override void OnStartClient()
+    {
+        base.OnStartClient();
         if (!IsServerStarted)
         {
-            var agent = GetComponent<NavMeshAgent>();
+            NavMeshAgent agent = GetComponent<NavMeshAgent>();
             if (agent != null)
                 agent.enabled = false;
         }
-
-        FindTarget();
     }
 
     [Server]
@@ -94,6 +99,21 @@ public class EnemyController : NetworkBehaviour
                 _agent.ResetPath();
 
             SyncAnimation(0f, true);
+            TryAttack();
+        }
+    }
+
+    [Server]
+    void TryAttack()
+    {
+        if (Time.time < _lastAttackTime + _attackCooldown) return;
+        _lastAttackTime = Time.time;
+
+        PlayerHealth health = _target.GetComponent<PlayerHealth>();
+        if (health != null)
+        {
+            float dmg = data != null ? data.damage : 10f;
+            health.TakeDamage(dmg);
         }
     }
 
